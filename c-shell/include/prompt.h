@@ -10,4 +10,5 @@
 
 void init_homedir();
 void display_prompt();
+const char* get_shell_home(void);
 #endif

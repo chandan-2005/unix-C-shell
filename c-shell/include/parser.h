@@ -3,6 +3,6 @@
 
 #include "lexer.h"
 
-int validate_syntax(Token *head);
+int valid_syntax(Token *head);
 
 #endif

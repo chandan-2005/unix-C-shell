@@ -17,6 +17,6 @@ typedef struct Token {
 } Token;
 
 Token* lex_input(const char *input);
-void free_tokens(Token *tokens);
+void free_t(Token *tokens);
 
 #endif 

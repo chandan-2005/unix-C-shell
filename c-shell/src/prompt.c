@@ -49,3 +49,7 @@ void display_prompt() {
     printf("<%s@%s:%s> ", username, hostname, path);
     fflush(stdout);//line buffered
 }
+
+const char* get_shell_home(void) {
+    return shell_home;
+}

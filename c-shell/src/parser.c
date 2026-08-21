@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "parser.h"
 
-int validate_syntax(Token *head) {
+int valid_syntax(Token *head) {
     if (head == NULL) {
         return 1; 
     }
@@ -12,13 +12,13 @@ int validate_syntax(Token *head) {
         if (prev == NULL && (curr->type == TOKEN_OP_PIPE || 
                              curr->type == TOKEN_OP_AMP || 
                              curr->type == TOKEN_OP_SEMI)) {
-            fprintf(stderr, "cshell: invalid syntax\n");
+            perror("cshell: invalid syntax\n");
             return 0;
         }
 
         if (curr->type == TOKEN_OP_LT || curr->type == TOKEN_OP_GT || curr->type == TOKEN_OP_GTGT) {
             if (curr->next == NULL || curr->next->type != TOKEN_WORD) {
-                fprintf(stderr, "cshell: invalid syntax\n");
+                perror("cshell: invalid syntax\n");
                 return 0;
             }
         }
@@ -28,7 +28,7 @@ int validate_syntax(Token *head) {
                 curr->next->type == TOKEN_OP_PIPE || 
                 curr->next->type == TOKEN_OP_AMP || 
                 curr->next->type == TOKEN_OP_SEMI) {
-                fprintf(stderr, "cshell: invalid syntax\n");
+                perror("cshell: invalid syntax\n");
                 return 0;
             }
         }
@@ -37,7 +37,7 @@ int validate_syntax(Token *head) {
                (curr->next->type == TOKEN_OP_PIPE || 
                 curr->next->type == TOKEN_OP_AMP || 
                 curr->next->type == TOKEN_OP_SEMI)) {
-                fprintf(stderr, "cshell: invalid syntax\n");
+                perror("cshell: invalid syntax\n");
                 return 0;
             }
         }
