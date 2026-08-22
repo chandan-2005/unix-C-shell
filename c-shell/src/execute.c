@@ -7,6 +7,7 @@
 #include "reveal.h"
 #include "locate.h"
 #include "peek.h"
+#include "external.h"
 static char prev_dir[PATH_MAX] = "";
 
 void exec_cmd(Token *tokens) {
@@ -54,5 +55,6 @@ void exec_cmd(Token *tokens) {
         run_peek(tokens);
         return;
     }
+    run_external(tokens);
     printf("Command '%s' recognized\n", tokens->value);
 }
