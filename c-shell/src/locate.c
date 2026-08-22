@@ -23,7 +23,7 @@ void run_locate(Token *tokens) {
     while (curr != NULL) {
         int found = 0;
         char *cmd = curr->value;
-        char full_path[4096];
+        char full_path[8192];
         char cwd[4096];
         if (getcwd(cwd, sizeof(cwd)) != NULL) {
             snprintf(full_path, sizeof(full_path), "%s/%s", cwd, cmd);

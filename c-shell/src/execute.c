@@ -5,7 +5,8 @@
 #include "execute.h"
 #include "prompt.h"
 #include "reveal.h"
-
+#include "locate.h"
+#include "peek.h"
 static char prev_dir[PATH_MAX] = "";
 
 void exec_cmd(Token *tokens) {
@@ -43,6 +44,14 @@ void exec_cmd(Token *tokens) {
     } 
     else if (strcmp(tokens->value, "reveal") == 0) {
         run_reveal(tokens);
+        return;
+    }
+    else if (strcmp(tokens->value, "locate") == 0) {
+        run_locate(tokens);
+        return;
+    }
+    else if (strcmp(tokens->value, "peek") == 0) {
+        run_peek(tokens);
         return;
     }
     printf("Command '%s' recognized\n", tokens->value);
