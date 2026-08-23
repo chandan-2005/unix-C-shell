@@ -56,5 +56,4 @@ void exec_cmd(Token *tokens) {
         return;
     }
     run_external(tokens);
-    printf("Command '%s' recognized\n", tokens->value);
 }
