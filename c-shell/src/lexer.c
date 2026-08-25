@@ -9,25 +9,25 @@ static void add_t(Token **head, Token **tail, TokenType type, const char *value)
         perror("malloc failed");
         exit(EXIT_FAILURE);
     }
-    new_node->type=type;
-    new_node->value=strdup(value); 
-    new_node->next=NULL;
+    new_node->type = type;
+    new_node->value = strdup(value); 
+    new_node->next = NULL;
 
-    if (*head==NULL) {
-        *head=new_node;
-        *tail=new_node;
+    if (*head == NULL) {
+        *head = new_node;
+        *tail = new_node;
     } else {
-        (*tail)->next=new_node;
-        *tail=new_node;
+        (*tail)->next = new_node;
+        *tail = new_node;
     }
 }
 
 Token* lex_input(const char *input) {
-    Token *head=NULL;
-    Token *tail=NULL;
+    Token *head = NULL;
+    Token *tail = NULL;
     int i = 0;
 
-    while (input[i]!='\0') {
+    while (input[i] != '\0') {
         if (input[i] == ' ' || input[i] == '\t' || input[i] == '\n' || input[i] == '\r') {
             i++;
             continue;
@@ -65,19 +65,24 @@ Token* lex_input(const char *input) {
             int b_idx = 0;
             int sq = 0; 
             int dq = 0; 
+            
+            int explicit_empty = 0; 
+
             while (input[i] != '\0') {
                 if (!sq && !dq) {
                     if (input[i] == ' ' || input[i] == '\t' || input[i] == '\n' || input[i] == '\r') break;
                     if (input[i] == '|' || input[i] == '&' || input[i] == ';' || 
                         input[i] == '<' || input[i] == '>') break;
                 }
+                
                 if (input[i] == '\'' && !dq) {
                     sq = !sq; 
-                    i++;
+                    explicit_empty = 1; 
                     continue;
                 }
                 if (input[i] == '"' && !sq) {
                     dq = !dq; 
+                    explicit_empty = 1;
                     i++;
                     continue;
                 }
@@ -94,7 +99,7 @@ Token* lex_input(const char *input) {
                         }
                     } else {
                         if (input[i+1] == '\0' || input[i+1] == '\n') {
-                            perror("cshell: invalid syntax");
+                            fprintf(stderr, "cshell: invalid syntax\n"); // Replaced perror!
                             free_t(head);
                             return NULL;
                         }
@@ -106,13 +111,15 @@ Token* lex_input(const char *input) {
 
                 buffer[b_idx++] = input[i++];
             }
+            
             if (sq || dq) {
-                perror("cshell: invalid syntax");
+                fprintf(stderr, "cshell: invalid syntax\n"); // Replaced perror!
                 free_t(head);
                 return NULL;
             }
             buffer[b_idx] = '\0';
-            if (b_idx > 0) {
+            
+            if (b_idx > 0 || explicit_empty) {
                 add_t(&head, &tail, TOKEN_WORD, buffer);
             }
         }
