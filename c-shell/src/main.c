@@ -14,7 +14,7 @@ int main(void) {
     while (1) {
         display_prompt();
         read = getline(&line, &len, stdin);
-        if (read == -1) {
+        if (read == -1) { //eof (Ctrl+D) or error
             printf("\n"); 
             break;        
         }

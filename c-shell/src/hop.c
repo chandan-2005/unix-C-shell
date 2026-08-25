@@ -26,7 +26,7 @@ static void frecency_db_path(char out[PATH_MAX]) {
     const char *home = getenv("HOME");
     if (!home) home = "/tmp";
     snprintf(out, PATH_MAX, "%s/.cshell_frecency", home);
-}
+}//frequency database path (persistent storage) is ~/.cshell_frecency in the user's home directory. If HOME is not set, it defaults to /tmp/.cshell_frecency.
 
 static int load_entries(FrecencyEntry entries[MAX_ENTRIES]) {
     char dbpath[PATH_MAX];
@@ -160,7 +160,7 @@ static void hop_one(const char *arg) {
         char cwd[PATH_MAX];
         if (getcwd(cwd, sizeof(cwd)) == NULL) return;
         if (strcmp(cwd, "/") == 0) return; 
-        do_chdir("..");
+        do_chdir("..");//go up one directory level
         return;
     }
     if (strcmp(arg, "-") == 0) {
@@ -184,7 +184,7 @@ static void hop_one(const char *arg) {
 void run_hop(Token *tokens) {
     Token *curr = tokens->next;
     if (curr == NULL) {
-        hop_one("~");
+        hop_one("~");//no arg then hop ~
         return;
     }
     while (curr != NULL) {
