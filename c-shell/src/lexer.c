@@ -99,7 +99,7 @@ Token* lex_input(const char *input) {
                         }
                     } else {
                         if (input[i+1] == '\0' || input[i+1] == '\n') {
-                            fprintf(stderr, "cshell: invalid syntax\n"); // Replaced perror!
+                            fprintf(stderr, "cshell: invalid syntax\n");
                             free_t(head);
                             return NULL;
                         }
@@ -113,7 +113,7 @@ Token* lex_input(const char *input) {
             }
             
             if (sq || dq) {
-                fprintf(stderr, "cshell: invalid syntax\n"); // Replaced perror!
+                fprintf(stderr, "cshell: invalid syntax\n"); 
                 free_t(head);
                 return NULL;
             }
