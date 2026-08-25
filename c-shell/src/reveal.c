@@ -2,84 +2,128 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <sys/stat.h>
+#include <limits.h>
 #include "reveal.h"
 #include "prompt.h"
-#include <sys/stat.h>
-#include <pwd.h>
-#include <grp.h>
-#include <time.h>
+#include "hop.h"
 
-static void print_detailed(const char *filepath, const char *filename) {
-    struct stat st;
-    if (stat(filepath, &st) == -1) {
-        perror("stat failed");
-        return;
-    }
-    printf((S_ISDIR(st.st_mode)) ? "d" : "-");
-    printf((st.st_mode & S_IRUSR) ? "r" : "-");
-    printf((st.st_mode & S_IWUSR) ? "w" : "-");
-    printf((st.st_mode & S_IXUSR) ? "x" : "-");
-    printf((st.st_mode & S_IRGRP) ? "r" : "-");
-    printf((st.st_mode & S_IWGRP) ? "w" : "-");
-    printf((st.st_mode & S_IXGRP) ? "x" : "-");
-    printf((st.st_mode & S_IROTH) ? "r" : "-");
-    printf((st.st_mode & S_IWOTH) ? "w" : "-");
-    printf((st.st_mode & S_IXOTH) ? "x" : "-");
-    printf(" %lu ", st.st_nlink);
-    struct passwd *pw = getpwuid(st.st_uid);
-    struct group  *gr = getgrgid(st.st_gid);
-    printf("%s %s ", pw ? pw->pw_name : "unknown", gr ? gr->gr_name : "unknown");
-    printf("%8ld ", st.st_size);
-
-    char timebuf[64];
-    struct tm *tm_info = localtime(&st.st_mtime);
-    strftime(timebuf, sizeof(timebuf), "%b %d %H:%M", tm_info);
-    printf("%s ", timebuf);
-    printf("%s\n", filename);
+static int cmp_names(const void *a, const void *b) {
+    const char *sa = *(const char * const *)a;
+    const char *sb = *(const char * const *)b;
+    return strcmp(sa, sb);
 }
 
+static char** read_sorted_entries(const char *path, int flag_a, int *out_count) {
+    DIR *dir = opendir(path);
+    if (!dir) {
+        *out_count = -1;
+        return NULL;
+    }
+
+    char **names = NULL;
+    int count = 0;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        if (!flag_a && entry->d_name[0] == '.') continue;
+        names = realloc(names, sizeof(char*) * (count + 1));
+        names[count++] = strdup(entry->d_name);
+    }
+    closedir(dir);
+
+    if (count > 1) qsort(names, count, sizeof(char*), cmp_names);
+    *out_count = count;
+    return names;
+}
+
+static void free_entries(char **names, int count) {
+    for (int i = 0; i < count; i++) free(names[i]);
+    free(names);
+}
+
+static void reveal_dir(const char *abs_path, const char *rel_prefix, int flag_a, int flag_t) {
+    int count;
+    char **names = read_sorted_entries(abs_path, flag_a, &count);
+    if (count < 0) {
+        fprintf(stderr, "reveal: no such directory\n");
+        return;
+    }
+
+    for (int i = 0; i < count; i++) {
+        char rel[PATH_MAX];
+        if (rel_prefix[0] == '\0') snprintf(rel, sizeof(rel), "%s", names[i]);
+        else snprintf(rel, sizeof(rel), "%s/%s", rel_prefix, names[i]);
+
+        char child_abs[PATH_MAX];
+        snprintf(child_abs, sizeof(child_abs), "%s/%s", abs_path, names[i]);
+
+        struct stat st;
+        int is_dir = (stat(child_abs, &st) == 0 && S_ISDIR(st.st_mode));
+
+        if (is_dir && flag_t) printf("%s/\n", rel);
+        else printf("%s\n", rel);
+
+        if (is_dir && flag_t) {
+            reveal_dir(child_abs, rel, flag_a, flag_t);
+        }
+    }
+    free_entries(names, count);
+}
 
 void run_reveal(Token *tokens) {
-    int flag_a = 0;
-    int flag_l = 0;
-    const char *path = "."; 
-    Token *curr = tokens->next; 
+    int flag_a = 0, flag_t = 0;
+    const char *arg = NULL;
+    int arg_count = 0;
+
+    Token *curr = tokens->next;
     while (curr != NULL) {
         if (curr->value[0] == '-' && strlen(curr->value) > 1) {
             for (int i = 1; curr->value[i] != '\0'; i++) {
                 if (curr->value[i] == 'a') flag_a = 1;
-                else if (curr->value[i] == 'l') flag_l = 1;
+                else if (curr->value[i] == 't') flag_t = 1;
                 else {
-                    fprintf(stderr, "reveal: invalid flag -- '%c'\n", curr->value[i]);
+                    fprintf(stderr, "reveal: invalid syntax\n");
                     return;
                 }
             }
         } else {
-            if (strcmp(curr->value, "~") == 0) {
-                path = get_shell_home();
-            } else {
-                path = curr->value;
-            }
+            arg = curr->value;
+            arg_count++;
         }
         curr = curr->next;
     }
-    DIR *dir = opendir(path);
-    if (dir == NULL) {
-        perror("reveal");
+
+    if (arg_count > 1) {
+        fprintf(stderr, "reveal: invalid syntax\n");
         return;
     }
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (!flag_a && entry->d_name[0] == '.') {
-            continue;
+
+    const char *path;
+    if (arg == NULL) {
+        path = ".";
+    } else if (strcmp(arg, "~") == 0) {
+        path = get_shell_home();
+    } else if (strcmp(arg, ".") == 0) {
+        path = ".";
+    } else if (strcmp(arg, "..") == 0) {
+        path = "..";
+    } else if (strcmp(arg, "-") == 0) {
+        const char *prev = get_hop_prev_dir();
+        if (prev[0] == '\0') {
+            fprintf(stderr, "reveal: no such directory\n");
+            return;
         }
-        char full_path[4096];
-        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
-        if (flag_l) {
-            print_detailed(full_path, entry->d_name);
-        } else {
-            printf("%s\n", entry->d_name);
-        }
+        path = prev;
+    } else {
+        path = arg;
     }
-    closedir(dir);
+
+    struct stat st;
+    if (stat(path, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        fprintf(stderr, "reveal: no such directory\n");
+        return;
+    }
+
+    reveal_dir(path, "", flag_a, flag_t);
 }
