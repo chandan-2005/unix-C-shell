@@ -5,7 +5,7 @@
 #include "reveal.h"
 #include "locate.h"
 #include "peek.h"
-#include "external.h"
+#include "pipeline.h"
 
 void exec_cmd(Token *tokens) {
     if (!tokens) return;
@@ -26,5 +26,5 @@ void exec_cmd(Token *tokens) {
         run_peek(tokens);
         return;
     }
-    run_external(tokens);
+    execute_pipeline(tokens);
 }
