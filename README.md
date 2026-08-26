@@ -1,18 +1,27 @@
-C-shell (POSIX compliant)
-Project structure-
+# Custom C-Shell (OSN Mini-Project 1)
+
+A Unix shell written from scratch in C, built as part of an OS & Networks mini-project. It is strictly POSIX compliant. 
+
+Every time you press Enter, this shell tokenizes your input, checks that it makes grammatical sense against a custom right-linear grammar, and then wires together `fork`, `execv`, `pipe`, and `dup2` to actually run your commands concurrently.
+
+## Project Structure
+```text
 mini-project1/
 ├── c-shell/
 │   ├── src/
 │   ├── include/
 │   └── Makefile
-├── xv6/ (TO DO)
+├── xv6/
 │   ├── (TO DO)
 ├── AI-usage.pdf
 └── README.md
-A Unix shell written from scratch in C, as part of an OS & Networks mini-project
- Every time you press Enter: tokenizing your input, checking it makes grammatical sense, then wiring together fork, exec, pipe, and dup2 to actually run something.
+
 Build Instructions:
 Build the Shell: Navigate to the mini-project1/c-shell/ directory and run make all. This compiles the project using strict POSIX compliance flags (C23 standard, -Wall, -Wextra, -Werror).
+## Prerequisites
+To compile and run this shell, you will need a UNIX-like environment (Linux, macOS, or WSL on Windows) with:
+* **GCC** (supporting C23 standard)
+* **GNU Make**
 
 Run the Shell: Start the interactive prompt by executing ./shell.out.
 
@@ -177,3 +186,64 @@ Sequencing (`;`) and backgrounding (`&`) are recognized by the grammar and get v
 | `external.c` / `external.h` | Thin entry point that hands external commands off to the pipeline machinery |
 
 The token stream itself is a simple singly-linked list (`Token *`) rather than a full parse tree — the grammar is small enough that a flat list carries all the information execution needs.
+
+Architecture & Implementation Details
+Part A: Shell Input & Parsing
+A1: Prompt (src/prompt.c): Displays the <username@hostname:cwd> prompt when the shell is ready. The directory you launch shell.out from becomes its "home" (~). Wander into subdirectories and the prompt will show ~/wherever/you/are; wander outside your home entirely and it dynamically falls back to showing the full absolute path.
+
+A2 & A3: Lexer (src/lexer.c): Turns raw text into a stream of tokens (WORD, |, &, ;, <, >, >>). It rigorously applies maximal-munch tokenization and properly manages single quotes, double quotes, and backslash escapes the way a POSIX shell would.
+
+A3: Parser (src/parser.c): Validates the token stream against a strict right-linear grammar before anything is allowed to run. Invalid syntax (like cat | or echo hi ; or starting lines with operators) is rejected with a clear error instead of causing unexpected behavior.
+
+Part B: Built-in Commands (Intrinsics)
+hop (src/hop.c): Smarter directory navigation. Changes the working directory sequentially for multiple arguments. It features a custom Frecency (Frequency + Recency) fallback algorithm that tracks historical directory visits persistently, allowing fuzzy-search jumping if a direct path fails.
+
+hop                  # go home
+hop ~                # go home
+hop .                # do nothing (stay put)
+hop ..               # go up one level
+hop -                # go back to wherever you were before the last hop
+hop some/relative/path
+
+reveal (src/reveal.c): My custom take on ls. It reads directory streams and pulls detailed file metadata using stat. It parses -a (show hidden) and -t (recursive tree) flags, sorting all output lexicographically. With -t, nested entries are shown as paths relative to whatever you asked to reveal.
+
+reveal             # list the current directory
+reveal -ta         # combine flags: recurse subdirectories AND show hidden
+
+peek (src/peek.c): A highly robust file reader. Prints file contents forward, with an optional -n flag for line numbering. The -r (reverse) mode is the neat bit: for a real file, it doesn't cheat by loading the whole thing into memory—it uses lseek() to seek backward through the file in fixed 4KB chunks, scanning for line breaks to prevent memory exhaustion on massive files.
+
+peek file.txt            # print it, same order as it's stored
+peek -rn file.txt        # print it in reverse line order, with line numbers
+peek file1.txt file2.txt # concatenate multiple files
+peek -                   # reads from stdin explicitly
+
+locate (src/locate.c): Similar to which -a. Hunts for executable binaries by checking the current working directory first, then sequentially scanning every folder listed in the system's PATH environment variable.
+
+locate python      # prints every matching executable
+locate python nada # handles multiple names, one per line of output
+
+Part C: Execution, Redirection & Pipes
+Command Execution (src/resolver.c, src/execute.c): Dispatches commands. If it's not a builtin, it resolves it against PATH (or the cwd), spawns child processes via fork(), and replaces their images with execv(). It supports the % prefix to explicitly bypass current-directory checks.
+
+Redirection & Pipes (src/redirection.c, src/pipeline.c): Orchestrates complex file I/O and parallel execution. It dynamically creates pipe() descriptors and wires concurrent child processes together using dup2() while strictly closing unused descriptors to prevent deadlocks.
+
+cat < a.txt < b.txt                # concatenate a.txt then b.txt as one input stream
+echo hi > out1.txt >> out2.txt     # write to out1 (truncate) and append to out2 independently
+cat < in.txt | sort > out.txt      # pipes and redirection working seamlessly together
+
+File,What it's responsible for
+main.c,The core read–lex–parse–execute loop.
+prompt.c / .h,"Building and printing the user@host:path prompt, tracking the home directory."
+lexer.c / .h,"Turning a raw input line into a linked list of tokens, handling quotes and escapes."
+parser.c / .h,Checking the token list against the shell's grammar before anything runs.
+execute.c / .h,"Looking at the first token and deciding: builtin, or hand off to external execution?"
+hop.c / .h,"The hop builtin, including the persistent frecency database."
+reveal.c / .h,The reveal builtin (directory traversal and stat parsing).
+peek.c / .h,The peek builtin (forward and chunked reverse file reading).
+locate.c / .h,The locate builtin (PATH iteration and executable validation).
+resolver.c / .h,"Turning a bare command name into a real, executable path (checking /, cwd, %, and PATH)."
+pipeline.c / .h,Splitting a command line on `
+redirection.c / .h,"Opening the right files in the right mode for <, >, and >>, including fan-in/fan-out for multiple files."
+## Acknowledgments & AI Usage
+This project was developed strictly adhering to the course's academic integrity guidelines. AI tools were utilized for debugging complex memory management (e.g., `strtok` segfaults) and conceptualizing pipeline deadlocks. 
+A full, detailed breakdown of all AI prompts, screenshots, and generation explanations can be found in the attached **`AI-usage.pdf`** file at the root of the project.
