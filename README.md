@@ -1,12 +1,11 @@
 C-shell (POSIX compliant)
-
-project structure-
+Project structure-
 mini-project1/
 ├── c-shell/
 │   ├── src/
 │   ├── include/
 │   └── Makefile
-├── xv6/
+├── xv6/ (TO DO)
 │   ├── (TO DO)
 ├── AI-usage.pdf
 └── README.md

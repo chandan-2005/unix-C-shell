@@ -9,11 +9,19 @@
 #include "resolver.h"
 
 void execute_pipeline(Token *tokens) {
+    Token *list_end = NULL;
+    for (Token *t = tokens; t != NULL; t = t->next) {
+        if (strcmp(t->value, ";") == 0 || strcmp(t->value, "&") == 0) {
+            list_end = t;
+            break;
+        }
+    }
+
     Token *cmd_starts[128];
     int num_cmds = 0;
     cmd_starts[num_cmds++] = tokens;
     Token *curr = tokens;
-    while (curr != NULL) {
+    while (curr != NULL && curr != list_end) {
         if (strcmp(curr->value, "|") == 0) cmd_starts[num_cmds++] = curr->next;
         curr = curr->next;
     }
@@ -32,7 +40,7 @@ void execute_pipeline(Token *tokens) {
         char *out_files[128]; int out_modes[128]; out_counts[i] = 0;
 
         curr = cmd_starts[i];
-        while (curr != NULL && strcmp(curr->value, "|") != 0 && argc < 127) {
+        while (curr != NULL && curr != list_end && strcmp(curr->value, "|") != 0 && argc < 127) {
             if (strcmp(curr->value, "<") == 0 && curr->next) {
                 in_files[in_count++] = curr->next->value;
                 curr = curr->next->next; continue;
@@ -62,7 +70,8 @@ void execute_pipeline(Token *tokens) {
 
         char *exec_path = resolve_command_path(args[0]);
         if (!exec_path) {
-            fprintf(stderr, "cshell: command not found (%s)\n", args[0]);
+            const char *display_name = (args[0][0] == '%') ? args[0] + 1 : args[0];
+            fprintf(stderr, "cshell: command not found (%s)\n", display_name);
             pids[i] = -1; continue;
         }
 

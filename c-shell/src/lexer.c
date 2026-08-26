@@ -78,6 +78,7 @@ Token* lex_input(const char *input) {
                 if (input[i] == '\'' && !dq) {
                     sq = !sq; 
                     explicit_empty = 1; 
+                    i++;
                     continue;
                 }
                 if (input[i] == '"' && !sq) {
