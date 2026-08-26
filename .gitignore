@@ -1,0 +1,11 @@
+
+*.o
+
+*.out
+
+shell.out
+
+.cshell_tmp_in_*
+
+.DS_Store
+Thumbs.db
