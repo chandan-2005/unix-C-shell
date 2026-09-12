@@ -10,7 +10,7 @@ int valid_syntax(Token *head) {
 
     while (curr != NULL) {
         if (prev == NULL && curr->type != TOKEN_WORD) {
-            fprintf(stderr, "cshell: invalid syntax\n"); // Replaced perror!
+            fprintf(stderr, "cshell: invalid syntax\n"); 
             return 0;
         }
 
