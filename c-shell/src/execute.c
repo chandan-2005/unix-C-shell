@@ -6,6 +6,11 @@
 #include "locate.h"
 #include "peek.h"
 #include "pipeline.h"
+#include "activities.h"
+#include "resume.h"
+#include "ping.h"
+#include "spy.h"
+#include "snoop.h"
 
 void exec_cmd(Token *tokens) {
     if (!tokens) return;
@@ -24,6 +29,26 @@ void exec_cmd(Token *tokens) {
     }
     else if (strcmp(tokens->value, "peek") == 0) {
         run_peek(tokens);
+        return;
+    }
+    else if (strcmp(tokens->value, "activities") == 0) {
+        run_activities(tokens);
+        return;
+    }
+    else if (strcmp(tokens->value, "resume") == 0) {
+        run_resume(tokens);
+        return;
+    }
+    else if (strcmp(tokens->value, "ping") == 0) {
+        run_ping(tokens);
+        return;
+    }
+    else if (strcmp(tokens->value, "spy") == 0) {
+        run_spy(tokens);
+        return;
+    }
+    else if (strcmp(tokens->value, "snoop") == 0) {
+        run_snoop(tokens);
         return;
     }
     execute_pipeline(tokens);
