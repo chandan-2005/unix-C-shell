@@ -42,6 +42,14 @@ static void free_entries(char **names, int count) {
     free(names);
 }
 
+static void print_entry_name(const char *name) {
+    if (strchr(name, ' ') != NULL) {
+        printf("'%s'", name);
+    } else {
+        printf("%s", name);
+    }
+}
+
 static void reveal_dir(const char *abs_path, const char *rel_prefix, int flag_a, int flag_t) {
     int count;
     char **names = read_sorted_entries(abs_path, flag_a, &count);
@@ -59,10 +67,15 @@ static void reveal_dir(const char *abs_path, const char *rel_prefix, int flag_a,
         snprintf(child_abs, sizeof(child_abs), "%s/%s", abs_path, names[i]);
 
         struct stat st;
-        int is_dir = (stat(child_abs, &st) == 0 && S_ISDIR(st.st_mode));
+        /* lstat (not stat): a symlink must never be treated as a
+           directory here, even if it points at one - otherwise it would
+           both get -t's trailing "/" and get recursed into, and a
+           symlink cycle would recurse forever. Per the doubt doc (Q42),
+           a symlink-to-a-directory is simply never expanded. */
+        int is_dir = (lstat(child_abs, &st) == 0 && S_ISDIR(st.st_mode));
 
-        if (is_dir && flag_t) printf("%s/\n", rel);
-        else printf("%s\n", rel);
+        print_entry_name(rel);
+        if (is_dir && flag_t) printf("/\n"); else printf("\n");
 
         if (is_dir && flag_t) {
             reveal_dir(child_abs, rel, flag_a, flag_t);
@@ -75,10 +88,17 @@ void run_reveal(Token *tokens) {
     int flag_a = 0, flag_t = 0;
     const char *arg = NULL;
     int arg_count = 0;
+    int seen_arg = 0; /* once true, no more flag tokens are allowed */
 
     Token *curr = tokens->next;
     while (curr != NULL) {
         if (curr->value[0] == '-' && strlen(curr->value) > 1) {
+            if (seen_arg) {
+                /* Syntax is (-(a|t)*)* (path)? - flags cannot follow the
+                   path argument. */
+                fprintf(stderr, "reveal: invalid syntax\n");
+                return;
+            }
             for (int i = 1; curr->value[i] != '\0'; i++) {
                 if (curr->value[i] == 'a') flag_a = 1;
                 else if (curr->value[i] == 't') flag_t = 1;
@@ -90,6 +110,7 @@ void run_reveal(Token *tokens) {
         } else {
             arg = curr->value;
             arg_count++;
+            seen_arg = 1;
         }
         curr = curr->next;
     }

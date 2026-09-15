@@ -5,6 +5,7 @@
 #include <signal.h>
 #include <time.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <sys/ptrace.h>
 #include <sys/user.h>
 #include <sys/wait.h>
@@ -12,6 +13,7 @@
 
 #include "snoop.h"
 #include "resolver.h"
+#include "redirection.h"
 
 /* A (non-exhaustive, per spec's explicit allowance) x86_64 syscall-number
    to name lookup table. Anything not listed here is printed as
@@ -97,11 +99,14 @@ static void print_summary(void) {
         }
     }
 
-    printf("%-13s %-7s %s\n", "syscall", "calls", "time");
+    /* Per Q64 of the doubt doc: snoop's summary goes to stderr, exactly
+       like strace, so a traced command's own stdout can still be
+       redirected/piped independently of the trace output. */
+    fprintf(stderr, "%-13s %-7s %s\n", "syscall", "calls", "time");
     for (int i = 0; i < stats_count; i++) {
         char fallback[32];
         const char *name = lookup_syscall_name(stats[i].sysno, fallback);
-        printf("%-13s %-7lld %.3fs\n", name, stats[i].calls, stats[i].total_time);
+        fprintf(stderr, "%-13s %-7lld %.3fs\n", name, stats[i].calls, stats[i].total_time);
     }
 }
 
@@ -178,10 +183,39 @@ void run_snoop(Token *tokens) {
         return;
     }
 
+    /* Per Q62 of the doubt doc: a normal command being traced can have
+       its own I/O redirection, which must be set up normally for the
+       child - it has nothing to do with snoop's own summary output
+       (which per Q64 goes to stderr regardless). Pull any `<`/`>`/`>>`
+       tokens out of the traced command's own argument list first. */
     char *args[128];
     int argc = 0;
-    for (Token *p = t; p != NULL && argc < 127; p = p->next) args[argc++] = p->value;
+    char *in_files[16];
+    int in_count = 0;
+    char *out_files[16];
+    int out_modes[16];
+    int out_count = 0;
+
+    for (Token *p = t; p != NULL && argc < 127; p = p->next) {
+        if ((p->type == TOKEN_OP_LT || p->type == TOKEN_OP_GT || p->type == TOKEN_OP_GTGT) &&
+            p->next != NULL) {
+            if (p->type == TOKEN_OP_LT) {
+                in_files[in_count++] = p->next->value;
+            } else {
+                out_modes[out_count] = (p->type == TOKEN_OP_GTGT);
+                out_files[out_count++] = p->next->value;
+            }
+            p = p->next;
+            continue;
+        }
+        args[argc++] = p->value;
+    }
     args[argc] = NULL;
+
+    if (argc == 0) {
+        fprintf(stderr, "snoop: command not found\n");
+        return;
+    }
 
     char *exec_path = resolve_command_path(args[0]);
     if (!exec_path) {
@@ -189,18 +223,53 @@ void run_snoop(Token *tokens) {
         return;
     }
 
+    int tmp_in_fd = -1;
+    if (in_count > 0) {
+        tmp_in_fd = setup_input(in_files, in_count, 9002);
+        if (tmp_in_fd < 0) {
+            free(exec_path);
+            return; /* setup_input already printed the right error */
+        }
+    }
+    if (out_count > 0 && outreg_validate(out_files, out_modes, out_count) < 0) {
+        if (tmp_in_fd >= 0) {
+            close(tmp_in_fd);
+            unlink(".cshell_tmp_in_9002");
+        }
+        free(exec_path);
+        return;
+    }
+
     pid_t child = fork();
     if (child == 0) {
+        if (tmp_in_fd >= 0) dup2(tmp_in_fd, STDIN_FILENO);
+        if (out_count > 0) {
+            char tmp_out_name[64];
+            snprintf(tmp_out_name, sizeof(tmp_out_name), ".cshell_tmp_out_%d", (int)getpid());
+            int tmp_out_fd = open(tmp_out_name, O_RDWR | O_CREAT | O_TRUNC, 0600);
+            dup2(tmp_out_fd, STDOUT_FILENO);
+            close(tmp_out_fd);
+        }
+        if (tmp_in_fd >= 0) close(tmp_in_fd);
         ptrace(PTRACE_TRACEME, 0, NULL, NULL);
         execv(exec_path, args);
         _exit(127);
     }
     free(exec_path);
+    if (tmp_in_fd >= 0) {
+        close(tmp_in_fd);
+        unlink(".cshell_tmp_in_9002");
+    }
+    if (out_count > 0) outreg_register(child, out_files, out_modes, out_count);
 
     int status;
     waitpid(child, &status, 0); /* initial SIGTRAP right after execve */
-    if (WIFEXITED(status)) return;
+    if (WIFEXITED(status)) {
+        outreg_finalize(child);
+        return;
+    }
 
     trace_loop(child);
+    outreg_finalize(child);
     print_summary();
 }

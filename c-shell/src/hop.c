@@ -129,13 +129,13 @@ static int resolve_direct(const char *name, char out[PATH_MAX]) {
     return 1;
 }
 
-static void do_chdir(const char *target) {
+static int do_chdir(const char *target) {
     char old_cwd[PATH_MAX];
     if (getcwd(old_cwd, sizeof(old_cwd)) == NULL) old_cwd[0] = '\0';
 
     if (chdir(target) != 0) {
         fprintf(stderr, "hop: no such directory\n");
-        return;
+        return 0;
     }
 
     char new_cwd[PATH_MAX];
@@ -146,39 +146,36 @@ static void do_chdir(const char *target) {
         strncpy(prev_dir, old_cwd, PATH_MAX - 1);
         prev_dir[PATH_MAX - 1] = '\0';
     }
+    return 1;
 }
 
-static void hop_one(const char *arg) {
+static int hop_one(const char *arg) {
     if (strcmp(arg, ".") == 0) {
-        return; 
+        return 1;
     }
     if (strcmp(arg, "~") == 0) {
-        do_chdir(get_shell_home());
-        return;
+        return do_chdir(get_shell_home());
     }
     if (strcmp(arg, "..") == 0) {
         char cwd[PATH_MAX];
-        if (getcwd(cwd, sizeof(cwd)) == NULL) return;
-        if (strcmp(cwd, "/") == 0) return; 
-        do_chdir("..");
-        return;
+        if (getcwd(cwd, sizeof(cwd)) == NULL) return 1;
+        if (strcmp(cwd, "/") == 0) return 1;
+        return do_chdir("..");
     }
     if (strcmp(arg, "-") == 0) {
-        if (prev_dir[0] == '\0') return; 
-        do_chdir(prev_dir);
-        return;
+        if (prev_dir[0] == '\0') return 1;
+        return do_chdir(prev_dir);
     }
 
     char resolved[PATH_MAX];
     if (resolve_direct(arg, resolved)) {
-        do_chdir(resolved);
-        return;
+        return do_chdir(resolved);
     }
     if (frecency_lookup(arg, resolved)) {
-        do_chdir(resolved);
-        return;
+        return do_chdir(resolved);
     }
     fprintf(stderr, "hop: no such directory\n");
+    return 0;
 }
 
 void run_hop(Token *tokens) {
@@ -187,8 +184,12 @@ void run_hop(Token *tokens) {
         hop_one("~");
         return;
     }
+    /* Per the doubt doc (Q40): if any argument in the sequence fails to
+       resolve, stop processing the remaining arguments - the shell ends
+       up sitting in whatever directory the last *successful* hop left
+       it in, rather than skipping the bad one and continuing. */
     while (curr != NULL) {
-        hop_one(curr->value);
+        if (!hop_one(curr->value)) break;
         curr = curr->next;
     }
 }

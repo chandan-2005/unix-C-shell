@@ -36,7 +36,7 @@ static void print_forward(FILE *fp, int flag_n, int *line_num) {
     }
     free(line);
 }
-static void print_reverse_buffered(FILE *fp, int flag_n) {
+static int print_reverse_buffered(FILE *fp, int flag_n, int offset) {
     char **lines = NULL;
     int count = 0;
     char *line = NULL;
@@ -52,16 +52,18 @@ static void print_reverse_buffered(FILE *fp, int flag_n) {
     for (int i = 0; i < count; i++) {
         if (is_non_empty(lines[i])) total_lines++;
     }
+    int local_total = total_lines;
 
     for (int i = count - 1; i >= 0; i--) {
         if (flag_n && is_non_empty(lines[i])) {
-            printf("%d ", total_lines--);
+            printf("%d ", offset + total_lines--);
         }
         printf("%s", lines[i]);
         if (lines[i][strlen(lines[i])-1] != '\n') printf("\n");
         free(lines[i]);
     }
     free(lines);
+    return local_total;
 }
 
 static void print_reverse_chunked(int fd, int flag_n, int *line_num) {
@@ -134,7 +136,7 @@ void run_peek(Token *tokens) {
                 if (curr->value[i] == 'n') flag_n = 1;
                 else if (curr->value[i] == 'r') flag_r = 1;
                 else {
-                    fprintf(stderr, "peek: invalid flag -- '%c'\n", curr->value[i]);
+                    fprintf(stderr, "peek: invalid syntax\n");
                     return;
                 }
             }
@@ -144,20 +146,52 @@ void run_peek(Token *tokens) {
         curr = curr->next;
     }
     if (file_count == 0) files[file_count++] = "-";
-    int line_num = 1;
+
     if (flag_r && flag_n) {
-        int grand_total = 0;
+        /* Per Q33 of the doubt doc: with -rn across multiple files, each
+           file keeps the global line numbers it would have had in
+           forward order (file1 = 1..k, file2 = k+1..k+m, ...); reversing
+           only changes *display order* within each file, never which
+           number is attached to which physical line. So every file gets
+           its own local countdown window [offset+1, offset+count],
+           and `offset` advances by that file's own non-empty-line count
+           before moving to the next file - it is never shared as one
+           continuously-decrementing counter across files. */
+        int offset = 0;
         for (int i = 0; i < file_count; i++) {
-            if (strcmp(files[i], "-") != 0) grand_total += count_non_empty_lines(files[i]);
+            const char *filename = files[i];
+
+            if (strcmp(filename, "-") == 0) {
+                offset += print_reverse_buffered(stdin, flag_n, offset);
+                continue;
+            }
+            struct stat st;
+            if (stat(filename, &st) == -1) {
+                fprintf(stderr, "peek: no such file or directory\n");
+                continue;
+            }
+            if (S_ISDIR(st.st_mode)) {
+                fprintf(stderr, "peek: is a directory\n");
+                continue;
+            }
+            int file_count_nonempty = count_non_empty_lines(filename);
+            int fd = open(filename, O_RDONLY);
+            if (fd == -1) { perror("peek"); continue; }
+            int start = offset + file_count_nonempty;
+            print_reverse_chunked(fd, flag_n, &start);
+            close(fd);
+            offset += file_count_nonempty;
         }
-        line_num = grand_total;
+        return;
     }
+
+    int line_num = 1;
 
     for (int i = 0; i < file_count; i++) {
         const char *filename = files[i];
 
         if (strcmp(filename, "-") == 0) {
-            if (flag_r) print_reverse_buffered(stdin, flag_n);
+            if (flag_r) print_reverse_buffered(stdin, flag_n, 0);
             else print_forward(stdin, flag_n, &line_num);
             continue;
         }

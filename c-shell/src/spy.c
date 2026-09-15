@@ -5,6 +5,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <errno.h>
 
 #include "spy.h"
 
@@ -51,13 +52,22 @@ void run_spy(Token *tokens) {
         return;
     }
 
-    printf("PID    FD    TYPE   PATH\n");
-
+    /* /proc/<pid> existing but being unreadable (e.g. a process owned by
+       another user) means the directory itself is visible but its
+       contents are not - probe with cwd, the cheapest of the entries we
+       need, before committing to printing the header. */
     char linkpath[300], target[512];
     ssize_t len;
 
     snprintf(linkpath, sizeof(linkpath), "/proc/%d/cwd", (int)pid);
     len = readlink(linkpath, target, sizeof(target) - 1);
+    if (len < 0 && errno == EACCES) {
+        fprintf(stderr, "spy: permission denied\n");
+        return;
+    }
+
+    printf("PID    FD    TYPE   PATH\n");
+
     if (len > 0) {
         target[len] = '\0';
         print_row(pid, "cwd", type_of(target), target);
